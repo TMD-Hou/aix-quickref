@@ -101,6 +101,7 @@ details{margin-top:10px} summary{cursor:pointer;color:var(--accent);font-weight:
           <label><input id="onlybad" type="checkbox"> 只看要處理的</label>
           <label><input id="allchk" type="checkbox" checked> 全選</label>
           <button type="button" id="candgo">把勾選的加入指令庫</button>
+          <button type="button" class="sec" id="candclr">取消這次匯入</button>
         </div>
         <div class="tw"><table id="candtb"></table></div>
         <details id="dupbox"><summary></summary><div class="tw"><table id="duptb"></table></div></details>
@@ -644,6 +645,7 @@ $('#candtb').addEventListener('change', e => {
   $('#candgo').textContent = '把勾選的 ' + S.cand.filter(r => r.on).length + ' 個加入指令庫';
 });
 $('#onlybad').addEventListener('change', renderCand);
+$('#candclr').addEventListener('click', () => { const n = S.cand.length; S.cand = []; S.dup = []; S.skip = []; renderCand(); $('#candmsg').innerHTML = '<div class="msg ok">已取消，這次的 ' + n + ' 個都沒有加入。可以重新選檔案。</div>'; });
 $('#allchk').addEventListener('change', e => { S.cand.forEach(r => r.on = e.target.checked && !!r.t); renderCand(); });
 $('#candgo').addEventListener('click', () => {
   const pick = S.cand.filter(r => r.on);
@@ -908,6 +910,7 @@ async function publish(){
     const c = await gh('/git/commits', { method: 'POST', body: { message: 'AIX 指令庫更新 v' + ver, tree: t.sha, parents: [head] } });
     await gh('/git/refs/heads/' + BRANCH, { method: 'PATCH', body: { sha: c.sha, force: false } });
     S.base = clone(master); S.baseSha = c.sha; S.ops = []; refresh();
+    setMode(); $('#xmsg').innerHTML = ''; $('#xmgmsg').innerHTML = '';
     say('ok', '<b>發佈完成！版本 ' + ver + '</b>　共 ' + data.rows.length + ' 個指令' + esc(note) + '<br>約 1～2 分鐘後，手機有網路時打開 App 會出現「有新版本」，點一下就更新。'
       + (r.warns.length ? '<details><summary>提醒 ' + r.warns.length + ' 筆（不影響發佈）</summary>' + list(r.warns, 50) + '</details>' : ''));
   } catch (e) {
