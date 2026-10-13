@@ -68,7 +68,7 @@ details{margin-top:10px} summary{cursor:pointer;color:var(--accent);font-weight:
     <h2>登入</h2>
     <div class="grid3">
       <div><label class="f" for="lpw">App 密碼</label><input id="lpw" type="password" autocomplete="current-password"></div>
-      <div><label class="f" for="ltk">發佈金鑰</label><input id="ltk" type="password" autocomplete="off" placeholder="github_pat_…"></div>
+      <div><label class="f" for="ltk">發佈金鑰（沒有就空白：只能整理，不能發佈）</label><input id="ltk" type="password" autocomplete="off" placeholder="github_pat_…"></div>
       <div><label class="f" for="lnm">你的名字（記錄是誰改的）</label><input id="lnm" type="text" autocomplete="name"></div>
     </div>
     <div class="row">
@@ -78,13 +78,14 @@ details{margin-top:10px} summary{cursor:pointer;color:var(--accent);font-weight:
     <div id="lmsg"></div>
   </section>
 
+  <div id="modemsg"></div>
   <div id="pubmsg"></div>
   <div id="main" hidden>
     <div class="nav">
       <button type="button" data-p="padd" class="on">新增指令</button>
       <button type="button" data-p="pedit">查詢・修改</button>
-      <button type="button" data-p="pxls">Excel</button>
-      <button type="button" data-p="plog">發佈紀錄・還原</button>
+      <button type="button" data-p="pxls" class="pubonly">Excel</button>
+      <button type="button" data-p="plog" class="pubonly">發佈紀錄・還原</button>
       <button type="button" class="sec" id="logout" style="margin-left:auto">登出</button>
     </div>
 
@@ -92,6 +93,7 @@ details{margin-top:10px} summary{cursor:pointer;color:var(--accent);font-weight:
       <h2>從 TXT 新增</h2>
       <p class="hint" style="margin-top:0">選同事給的 .txt（可以一次選多個）。程式會自動分類、把 IP 和序號換成佔位字。檢查下面的表格，按「加入」。</p>
       <div class="row"><input id="txt" type="file" accept=".txt,text/plain" multiple><button type="button" class="sec" id="manadd">手動新增一個指令</button></div>
+      <div class="row pubonly"><span>匯入同事的整理檔：</span><input id="opsin" type="file" accept=".json,application/json"></div>
       <div id="candmsg"></div>
       <div id="candbox" hidden>
         <div class="row">
@@ -157,6 +159,7 @@ details{margin-top:10px} summary{cursor:pointer;color:var(--accent);font-weight:
     <div class="t" id="bart"></div>
     <button type="button" class="sec" id="discard">放棄變更</button>
     <button type="button" id="pub">發佈</button>
+    <button type="button" id="expops" hidden>匯出整理檔</button>
   </div>
 </div>
 
@@ -494,13 +497,15 @@ function curData(){ return { tabs: tabsOf(S.W), rows: S.W['全部指令'].slice(
 function summary(){
   const c = { add: 0, set: 0, del: 0 }; let why = '';
   S.ops.forEach(o => { if (o.k === 'replace') why = o.why; else c[o.k]++; });
+  const by = [...new Set(S.ops.map(o => o.by).filter(Boolean))];
+  if (by.length) why = (why ? why + '、' : '') + '含 ' + by.join('、') + ' 的整理';
   return { ...c, why, n: S.ops.length };
 }
 function refresh(){
   applyOps();
   const s = summary();
   $('#bar').hidden = !s.n;
-  $('#bart').innerHTML = s.n ? '尚未發佈：' + (s.why ? '<b>' + esc(s.why) + '</b>　' : '') + '新增 ' + s.add + '、修改 ' + s.set + '、刪除 ' + s.del + '　<span class="hint">（按「發佈」才會更新到大家手機）</span>' : '';
+  $('#bart').innerHTML = s.n ? '尚未發佈：' + (s.why ? '<b>' + esc(s.why) + '</b>　' : '') + '新增 ' + s.add + '、修改 ' + s.set + '、刪除 ' + s.del + '　<span class="hint">' + (S.token ? '（按「發佈」才會更新到大家手機）' : '（整理好按「匯出整理檔」，傳給有發佈金鑰的人）') + '</span>' : '';
   if (!$('#pedit').hidden) renderList();
 }
 window.addEventListener('beforeunload', e => { if (S.ops.length) { e.preventDefault(); e.returnValue = ''; } });
@@ -511,16 +516,17 @@ $('#lgo').addEventListener('click', login);
 $('#lpw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 async function login(){
   const pw = $('#lpw').value, tk = $('#ltk').value.trim(), nm = $('#lnm').value.trim();
-  if (!pw || !tk || !nm) { $('#lmsg').innerHTML = '<div class="msg err">三個欄位都要填。</div>'; return; }
+  if (!pw || !nm) { $('#lmsg').innerHTML = '<div class="msg err">「App 密碼」和「你的名字」一定要填。</div>'; return; }
   if (!window.crypto || !crypto.subtle) { $('#lmsg').innerHTML = '<div class="msg err">這個瀏覽器不支援加密，請用 Chrome 或 Edge。</div>'; return; }
   $('#lgo').disabled = true; $('#lgo').textContent = '登入中…'; $('#lmsg').innerHTML = '';
   S.pw = pw; S.token = tk; S.name = nm;
   try {
     const ref = await gh('/git/ref/heads/' + BRANCH); S.baseSha = ref.object.sha;
     const m = await loadMaster(S.baseSha);
+    if (!m && !tk) throw new Error('GitHub 上還沒有指令庫，要先由有發佈金鑰的人建立。');
     S.base = m || { sheets: normSheets(null), log: [] };
     if ($('#lrm').checked) { store('aixm_pw', pw); store('aixm_tk', tk); store('aixm_nm', nm); } else { store('aixm_pw', null); store('aixm_tk', null); store('aixm_nm', null); }
-    $('#login').hidden = true; $('#main').hidden = false; refresh();
+    $('#login').hidden = true; $('#main').hidden = false; setMode(); refresh();
     if (!m) { show('pxls'); $('#xmsg').innerHTML = '<div class="msg warn"><b>第一次使用：</b>GitHub 上還沒有指令庫。請在下面選 AIX指令庫.xlsx 建立第一版，然後按「發佈」。</div>'; }
     else $('#candmsg').innerHTML = '<div class="msg ok">已載入最新指令庫：' + (S.W['全部指令'].length - 1) + ' 個指令。</div>';
   } catch (e) { $('#lmsg').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; }
@@ -702,6 +708,34 @@ $('#loglist').addEventListener('click', async e => {
     S.ops = [{ k: 'replace', sheets: m.sheets, why: '還原到 ' + b.dataset.v }]; refresh();
     b.closest('td').innerHTML = '<span class="badge">已選，請按發佈</span>';
   } catch (err) { alert(err.message); b.disabled = false; }
+});
+
+// ---- 整理模式（沒有發佈金鑰）：匯出 / 匯入整理檔 ----
+function setMode(){
+  const pub = !!S.token;
+  document.querySelectorAll('.pubonly').forEach(x => x.hidden = !pub);
+  $('#pub').hidden = !pub; $('#expops').hidden = pub;
+  $('#modemsg').innerHTML = pub ? '' : '<div class="msg warn" style="margin:0 0 14px"><b>整理模式（沒有發佈金鑰）：</b>可以從 TXT 新增、修改、刪除。完成後按最下面「匯出整理檔」，把檔案傳給有發佈金鑰的人，由他匯入並發佈。</div>';
+}
+$('#expops').addEventListener('click', async () => {
+  if (!S.ops.length) return;
+  const ops = S.ops.map(o => Object.assign({}, o, { by: o.by || S.name }));
+  const txt = await encrypt({ type: 'aix-ops', v: 1, name: S.name, time: new Date().toISOString(), ops }, S.pw);
+  const s = summary();
+  download('AIX整理檔_' + S.name.replace(/[\\/:*?"<>|\s]/g, '') + '_' + stamp() + '.json', txt, 'application/json');
+  $('#pubmsg').innerHTML = '<div class="msg ok">已匯出整理檔（新增 ' + s.add + '、修改 ' + s.set + '、刪除 ' + s.del + '）。把下載的 .json 檔傳給有發佈金鑰的人。檔案有加密，只有知道 App 密碼的人打得開。</div>';
+});
+$('#opsin').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    let o; try { o = await decrypt(await f.text(), S.pw); } catch (err) { throw new Error('打不開這個檔案：不是整理檔，或是用不同的 App 密碼匯出的。'); }
+    if (!o || o.type !== 'aix-ops' || !Array.isArray(o.ops)) throw new Error('這不是整理檔。');
+    const ops = o.ops.filter(x => x.k === 'add' || x.k === 'set' || x.k === 'del').map(x => Object.assign({}, x, { by: x.by || o.name }));
+    if (!ops.length) throw new Error('這個整理檔是空的。');
+    if (!confirm('匯入 ' + o.name + ' 的整理檔？\n\n新增 ' + ops.filter(x => x.k === 'add').length + '、修改 ' + ops.filter(x => x.k === 'set').length + '、刪除 ' + ops.filter(x => x.k === 'del').length + '\n\n匯入後可以在「查詢・修改」檢查（綠色＝新、黃色＝改），再按「發佈」。')) return;
+    S.ops.push(...ops); refresh();
+    $('#candmsg').innerHTML = '<div class="msg ok">已匯入 ' + esc(o.name) + ' 的整理檔：' + ops.length + ' 筆變更。可以到「查詢・修改」檢查，沒問題就按下方「發佈」。</div>';
+  } catch (err) { $('#candmsg').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>'; }
 });
 
 // ---- 放棄 / 發佈 ----
