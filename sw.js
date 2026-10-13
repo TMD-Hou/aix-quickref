@@ -1,10 +1,14 @@
-const C = 'aix-quickref-v20261013-175714';
+const C = 'aix-quickref-v20261013-181346';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
-self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C && k !== 'aix-img').map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
   const r = e.request, u = new URL(r.url); if (r.method !== 'GET' || u.origin !== location.origin) return;
   if (u.pathname.endsWith('manage.html') || u.searchParams.has('check')) return; // 管理頁、更新檢查不經過快取
+  if (u.pathname.includes('/img/')) { // 文件圖片：檔名就是內容雜湊，永久快取（看過一次就能離線看）
+    e.respondWith(caches.open('aix-img').then(c => c.match(r).then(m => m || fetch(r).then(res => { if (res.ok) c.put(r, res.clone()); return res; }))));
+    return;
+  }
   if (r.mode === 'navigate' || r.url.endsWith('/') || r.url.endsWith('index.html')) {
     e.respondWith(new Promise(resolve => {
       let done = false;
