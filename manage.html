@@ -796,11 +796,11 @@ $('#xmg').addEventListener('change', async e => {
   try {
     const raw = await readXlsx(await f.arrayBuffer());
     const sh = normSheets(raw);
-    const have = new Set(S.W['全部指令'].slice(1).map(r => ckey(r[3]))), seen = new Set();
+    const have = new Set(S.W['全部指令'].slice(1).map(r => r[1] + '|' + ckey(r[3]))), seen = new Set(); // 同一個指令可以出現在不同頁籤（例如 Site Check）
     const adds = [], skipped = [];
     sh['全部指令'].slice(1).forEach(r => {
       const c = (r[3] || '').trim(); if (!c) return;
-      const k = ckey(c); if (have.has(k) || seen.has(k)) { skipped.push(c); return; } seen.add(k);
+      const k = (r[1] || '') + '|' + ckey(c); if (have.has(k) || seen.has(k)) { skipped.push(c); return; } seen.add(k);
       const row = r.slice(0, 11); row[0] = ''; row[3] = mask(c); row[4] = mask(row[4] || '') || '（待補說明）'; if (!row[10]) row[10] = S.name + ' ' + today();
       adds.push({ k: 'add', row });
     });
